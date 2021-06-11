@@ -1,0 +1,67 @@
+FROM ubuntu:20.04
+LABEL maintainer Thomas Radloff <bostontrader@gmail.com>
+
+# 0. In the beginning...
+RUN apt update
+RUN apt install -y --no-install-recommends \
+    ca-certificates \
+    clang \
+    curl \
+    git \
+    libssl-dev libudev-dev \
+    llvm
+
+# 1. https://substrate.dev/docs/en/knowledgebase/getting-started/
+
+# This is the rust installation from rust and we have to do some sourcing via
+# .bashrc so that we have rust commands in the path in subsequent bash sessions.
+# See https://stackoverflow.com/questions/49676490/when-installing-rust-toolchain-in-docker-bash-source-command-doesnt-work
+# Unfortunately this doesn't work so just use the full path when necessary.
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
+RUN echo 'source $HOME/.cargo/env' >> $HOME/.bashrc
+
+RUN ~/.cargo/bin/rustup default stable
+RUN ~/.cargo/bin/rustup update
+RUN ~/.cargo/bin/rustup update nightly
+RUN ~/.cargo/bin/rustup target add wasm32-unknown-unknown --toolchain nightly
+
+# 2. https://substrate.dev/substrate-contracts-workshop/#/0/setup
+RUN ~/.cargo/bin/rustup component add rust-src --toolchain nightly
+RUN ~/.cargo/bin/rustup target add wasm32-unknown-unknown --toolchain stable
+
+# 3. Install the ink! cli tool that will make initializing, building, and testing
+# ink! smart contract projects easier.
+RUN ~/.cargo/bin/cargo install cargo-contract --vers ^0.12 --force --locked
+
+# 4. In order to compile smart contracts we'll need binaryen.
+# The version available to apt get is v91, but we require a version >= 99.  So download the binary directly.
+# -L to follow redirects
+RUN curl -L --output /usr/local/bin/binaryen.tar.gz https://github.com/WebAssembly/binaryen/releases/download/version_101/binaryen-version_101-x86_64-linux.tar.gz
+RUN tar -xf /usr/local/bin/binaryen.tar.gz --directory /usr/local/bin
+ENV PATH="/usr/local/bin/binaryen-version_101/bin:${PATH}"
+
+# 5. Create the flipper example contract.
+
+# 5.1 Create the contract
+RUN ~/.cargo/bin/cargo contract new flipper
+WORKDIR flipper
+
+# 5.2 Test it
+RUN ~/.cargo/bin/cargo +nightly test
+
+# 5.3 Compile to wasm
+RUN ~/.cargo/bin/cargo +nightly contract build
+
+FROM ubuntu:20.04
+COPY --from=0 /flipper/target/ink/flipper.wasm /root/flipper.wasm
+COPY --from=0 /flipper/target/ink/metadata.json /root/metadata.json
+
+# 1. Install python3, pip3, and the python interface to the block chain.
+RUN apt update
+RUN apt install -y --no-install-recommends pip python3
+RUN pip3 install substrate-interface
+
+# 2. Now copy and run the python test
+COPY main.py /root/main.py
+ENTRYPOINT python3 /root/main.py
+
