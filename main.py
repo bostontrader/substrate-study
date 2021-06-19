@@ -1,78 +1,93 @@
 import os
+import subprocess
 
 from substrateinterface.contracts import ContractCode, ContractInstance
 from substrateinterface import SubstrateInterface, Keypair
 
-# # Enable for debugging purposes
-# import logging
-# logging.basicConfig(level=logging.DEBUG)
+# This script assumes that docker images substrate-study-flipper and substrate-study-j exist
+# and contain the metadata.json and *.wasm files required to load said contract onto the canvas node
+# block chain.  This script further assumes that a canvas node block chain is presently executing.
+
+# 1.
+# Assuming so, copy the metadata.json and *.wasm from the relevant images to
+# the local file system whereupon the script may then use these files to load the flipper and j
+# contracts onto the block chain.
+
+# 1.1 flipper
+
+container_id = subprocess.check_output("docker create substrate-study-flipper", shell=True).decode("utf-8").rstrip()
+os.system(f"docker cp {container_id}:/root/flipper.wasm ./flipper.wasm")
+os.system(f"docker cp {container_id}:/root/metadata.json ./flipper.metadata.json")
+os.system(f'docker rm {container_id}')
+
+# 1.2 j
+
+container_id = subprocess.check_output("docker create substrate-study-j", shell=True).decode("utf-8").rstrip()
+os.system(f"docker cp {container_id}:/root/j.wasm ./j.wasm")
+os.system(f"docker cp {container_id}:/root/metadata.json ./j.metadata.json")
+os.system(f'docker rm {container_id}')
+
+# 2. Connect to the canvas node
+# try:
+substrate = SubstrateInterface(
+    url="ws://127.0.0.1:9944",
+    type_registry_preset='canvas'
+)
+
+# 3. We'll need a keypair in order to work with the contracts.
+keypair = Keypair.create_from_uri('//Alice')
+
+# 4. Now deploy the contracts if they're not already deployed.
+
+# 4.1 flipper
+# Upload WASM code
+code = ContractCode.create_from_contract_files(
+    metadata_file=os.path.join('.', 'flipper.metadata.json'),
+    wasm_file=os.path.join('.', 'flipper.wasm'),
+    substrate=substrate
+)
+
+# Deploy contract
+print('Deploy flipper contract...')
 
 try:
-    substrate = SubstrateInterface(
-        url="ws://127.0.0.1:9944",
-        type_registry_preset='canvas'
+    contract = code.deploy(
+        keypair=keypair,
+        endowment=10 ** 15,
+        gas_limit=1000000000000,
+        constructor="new",
+        args={'init_value': True},
+        upload_code=True
     )
 
-    keypair = Keypair.create_from_uri('//Alice')
-    contract_address = "5FSSvEfVKbJnLWyYNbjCKSKoqizbhbY9Zagsczcekqs2KzBi"
+    print(f'✅ Flipper deployed @ {contract.contract_address}')
 
-    # Check if contract is on chain
-    contract_info = substrate.query("Contracts", "ContractInfoOf", [contract_address])
+except Exception:
+    print("The flipper contract is already deployed.")
 
-    if contract_info.value:
 
-        print(f'Found contract on chain: {contract_info.value}')
+# 4.2 j
+# Upload WASM code
+code = ContractCode.create_from_contract_files(
+    metadata_file=os.path.join('.', 'j.metadata.json'),
+    wasm_file=os.path.join('.', 'j.wasm'),
+    substrate=substrate
+)
 
-        # Create contract instance from deterministic address
-        contract = ContractInstance.create_from_address(
-            contract_address=contract_address,
-            metadata_file=os.path.join(os.path.dirname(__file__), 'assets', 'flipper.json'),
-            substrate=substrate
-        )
-    else:
+# Deploy contract
+print('Deploy j contract...')
 
-        # Upload WASM code
-        code = ContractCode.create_from_contract_files(
-            metadata_file=os.path.join('/root', 'metadata.json'),
-            wasm_file=os.path.join('/root', 'flipper.wasm'),
-            substrate=substrate
-        )
+try:
+    contract = code.deploy(
+        keypair=keypair,
+        endowment=10 ** 15,
+        gas_limit=1000000000000,
+        constructor="new",
+        args={'init_value': True},
+        upload_code=True
+    )
 
-        # Deploy contract
-        print('Deploy contract...')
-        contract = code.deploy(
-            keypair=keypair,
-            endowment=10 ** 15,
-            gas_limit=1000000000000,
-            constructor="new",
-            args={'init_value': True},
-            upload_code=True
-        )
+    print(f'✅ j Deployed @ {contract.contract_address}')
 
-        print(f'✅ Deployed @ {contract.contract_address}')
-
-    # Read current value
-    result = contract.read(keypair, 'get')
-    print('Current value of "get":', result.contract_result_data)
-
-    # Do a gas estimation of the message
-    gas_predit_result = contract.read(keypair, 'flip')
-
-    print('Result of dry-run: ', gas_predit_result.contract_result_data)
-    print('Gas estimate: ', gas_predit_result.gas_consumed)
-
-    # Do the actual transfer
-    print('Executing contract call...')
-    contract_receipt = contract.exec(keypair, 'flip', args={
-
-    }, gas_limit=gas_predit_result.gas_consumed)
-
-    print(f'Events triggered in contract: {contract_receipt.contract_events}')
-
-    result = contract.read(keypair, 'get')
-
-    print('Current value of "get":', result.contract_result_data)
-
-except ConnectionRefusedError:
-    print("⚠️ Could not connect to (local) Canvas node, please read the instructions at https://github.com/paritytech/canvas-node")
-    exit()
+except Exception:
+    print("The j contract is already deployed.")

@@ -1,13 +1,23 @@
 # substrate-study
 The purpose of this repository is to demonstrate the ability to perform integration testing with a Substrate blockchain, one or more smart contracts, and associated tools.  All of this runs in docker containers.
 
+By following the README the user can build a set of suitable docker images that build a canvas node
+as well as any relevant ink! contracts.  The user can then execute a Python script that will
+load the contracts onto the canvas node block chain and invoke a variety of operations on said contracts.
+
+This is the foundation for how you can build an integration test of several contracts working together.
+
+## Getting started
+
 From a shell window on the host in a suitable directory:
 
 ```sh
 git clone https://github.com/bostontrader/substrate-study
 cd substrate-study
 docker build --file Dockerfile.canvas_node --tag substrate-study-canvas-node .
+docker build --file Dockerfile.contract-builder --tag substrate-study-contract-builder .
 docker build --file Dockerfile.flipper --tag substrate-study-flipper .
+docker build --file Dockerfile.j --tag substrate-study-j .
 ```
 
 Turn on the canvas-node...
@@ -17,10 +27,10 @@ docker run -it --rm --network=host substrate-study-canvas-node
 
 This is a single computer block chain that makes blocks and comes to its own consensus.  Perfect for this application.
 
-Finally, run the flipper container.  This will execute a test.  Observe the results.
+Finally, run the main.py script.  This will execute the test.  Observe the results.
 
 ```sh
-docker run -it --rm --network=host substrate-study-flipper
+./venv/bin/python main.py
 ```
 
 ## Digging deeper...
@@ -71,7 +81,7 @@ lots of opaque numbers in parameters and results to figure out.
 
 ## A few words about docker networking
 
-We need networking in order to build the containers initially and for them to do their jobs thereafter.  We may also have a variety of networking woes on our host involving firewalls, proxies, etc.  This topic is far too complex to address here, beyond a few simple warnings most relevant for this project.
+We need networking in order to build the containers initially and for them to do their jobs thereafter.  We may also have a variety of networking woes host involving firewalls, proxies, etc.  This topic is far too complex to address here, beyond a few simple warnings most relevant for this project.
 
 Recall that we can generally use --network=host in docker build and docker run commands.  When used with docker build, this option will cause docker to use the host network in order to execute RUN commands.  Whatever you have to do with your host to punch through the firewall will therefore generally accrue to the benefit of docker build.
 

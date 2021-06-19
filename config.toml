@@ -1,0 +1,10 @@
+[http]
+#proxy = "socks5://localhost:8080"
+
+[net]
+retry = 2                   # network retries
+git-fetch-with-cli = true   # use the `git` executable for git operations
+
+[source.crates-io]
+#registry = "https://github.com/rust-lang/crates.io-index"
+registry = "https://mirrors.tuna.tsinghua.edu.cn/git/crates.io-index.git"
